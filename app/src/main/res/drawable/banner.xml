@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Banner til Android TV (320 x 180) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape><solid android:color="#1A1C28" /></shape></item>
+    <item android:drawable="@drawable/ic_launcher_fg" android:gravity="center" android:width="160dp" android:height="160dp" />
+</layer-list>
