@@ -32,6 +32,9 @@ object Engine {
 
     // indbyggede effekter
     val effects = mutableStateListOf<Fx>()
+    /** Effekterne, der skiftes imellem under musik. */
+    val musicFx = mutableStateListOf<MusicFx>()
+    var blinkDim by mutableIntStateOf(5)
     var selected by mutableIntStateOf(0)
     var speed by mutableIntStateOf(50)
     var bright by mutableIntStateOf(100)
@@ -72,6 +75,8 @@ object Engine {
         if (::ctx.isInitialized) return
         ctx = c.applicationContext
         effects.clear(); effects.addAll(Store.loadFx())
+        musicFx.clear(); musicFx.addAll(Store.loadMusicFx())
+        blinkDim = Store.getInt("blinkdim", 5)
         speed = Store.getInt("speed", 50); bright = Store.getInt("bright", 100)
         interval = Store.getInt("interval", 30); sens = Store.getInt("sens", 55)
         mMode = Store.getStr("mmode", "cycle"); div = Store.getInt("div", 1)
@@ -90,7 +95,7 @@ object Engine {
         Store.putStr("band", band); Store.putStr("source", source); Store.putStr("ckind", cKind)
         Store.putStr("palette", palette); Store.putInt("con", cOn); Store.putInt("ctempo", cTempo.roundToInt())
         Store.putBool("nudge", nudge); Store.putBool("ack", BleHub.useAck); Store.putBool("melk", Proto.melk)
-        Store.putInt("fnum", fnum)
+        Store.putInt("fnum", fnum); Store.putInt("blinkdim", blinkDim)
     }
 
     /** En stav, der lige er blevet forbundet (igen), får den aktuelle tilstand. */
@@ -109,6 +114,7 @@ object Engine {
         projection?.let { try { it.stop() } catch (_: Exception) {} }
         projection = null
         BleHub.clearColors()
+        if (running == Run.MUSIC) BleHub.all(Proto.bright(bright))
         running = Run.NONE
         countdown = "–"; level = 0f
         if (mStatus.startsWith("Lytter")) mStatus = ""
@@ -171,6 +177,17 @@ object Engine {
     }
 
     fun resetList() { effects.clear(); effects.addAll(Store.DEFAULT_FX); selected = 0; Store.saveFx(effects) }
+
+    // ---------- musiklisten ----------
+    fun addToMusic(fx: Fx) {
+        if (musicFx.none { it.fx.id == fx.id && it.fx.v == fx.v }) { musicFx.add(MusicFx(fx)); Store.saveMusicFx(musicFx) }
+    }
+    fun removeFromMusic(i: Int) { if (i in musicFx.indices) { musicFx.removeAt(i); Store.saveMusicFx(musicFx) } }
+    fun setBlink(i: Int, on: Boolean) { if (i in musicFx.indices) { musicFx[i] = musicFx[i].copy(blink = on); Store.saveMusicFx(musicFx) } }
+    fun moveMusic(i: Int, d: Int) {
+        val j = i + d
+        if (i in musicFx.indices && j in musicFx.indices) { val x = musicFx.removeAt(i); musicFx.add(j, x); Store.saveMusicFx(musicFx) }
+    }
 
     fun importList(text: String): Int {
         val list = Store.parseExport(text)
@@ -270,7 +287,7 @@ object Engine {
         var slowE = 0.0; var fastE = 0.0; var longE = 0.0
         var strobeUntil = 0L; var strobeOn = false; var dropCool = 0L
         var vu = 0.0; var glow = 0.0; var cur: Rgb? = null
-        var lastFx = -1; var fxName = ""
+        var lastFx = -1; var fxName = ""; var curBlink = false; var dimAt = 0L
         val pal = Pal()
     }
 
@@ -325,11 +342,22 @@ object Engine {
                 else if (m.flashOff != 0L && t > m.flashOff) { m.flashOff = 0; BleHub.all(Proto.color(Rgb.BLACK)) }
             }
             "builtin" -> if (beat) currentFx()?.let { fireFx(it) }
-            "randfx" -> if (beat && effects.isNotEmpty()) {
-                var i = Random.nextInt(effects.size)
-                if (effects.size > 1 && i == m.lastFx) i = (i + 1 + Random.nextInt(effects.size - 1)) % effects.size
-                m.lastFx = i; val fx = effects[i]; m.fxName = fx.name
-                BleHub.all(Proto.effect(fx.id, fx.v))
+            "randfx" -> {
+                // musiklisten bruges; er den tom, bruges den almindelige liste uden blink
+                val list = if (musicFx.isNotEmpty()) musicFx.toList() else effects.map { MusicFx(it) }
+                if (beat && list.isNotEmpty()) {
+                    var i = Random.nextInt(list.size)
+                    if (list.size > 1 && i == m.lastFx) i = (i + 1 + Random.nextInt(list.size - 1)) % list.size
+                    m.lastFx = i; val pick = list[i]; m.fxName = pick.fx.name
+                    if (m.curBlink && !pick.blink) BleHub.all(Proto.bright(bright)) // tilbage til fuld styrke
+                    m.curBlink = pick.blink
+                    BleHub.all(Proto.effect(pick.fx.id, pick.fx.v))
+                }
+                // blink: fuld styrke på hvert beat, dæmpet imellem, mens effekten kører videre
+                if (m.curBlink) {
+                    if (raw) { BleHub.all(Proto.bright(bright)); m.dimAt = t + 120 }
+                    else if (m.dimAt != 0L && t > m.dimAt) { m.dimAt = 0; BleHub.all(Proto.bright(blinkDim)) }
+                }
             }
             "drop" -> when {
                 t < m.strobeUntil -> if (t - m.lastSend >= 50) {

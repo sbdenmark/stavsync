@@ -47,6 +47,23 @@ object Store {
         p.edit().putString("fx", a.toString()).apply()
     }
 
+    fun loadMusicFx(): List<MusicFx> {
+        val s = p.getString("mfx", null) ?: return emptyList()
+        return try {
+            val a = JSONArray(s)
+            List(a.length()) { i ->
+                val o = a.getJSONObject(i)
+                MusicFx(Fx(o.getInt("id"), o.getString("n"), o.optString("v", "A").firstOrNull() ?: 'A'), o.optBoolean("blink", false))
+            }
+        } catch (e: Exception) { emptyList() }
+    }
+
+    fun saveMusicFx(list: List<MusicFx>) {
+        val a = JSONArray()
+        list.forEach { a.put(JSONObject().put("id", it.fx.id).put("n", it.fx.name).put("v", it.fx.v.toString()).put("blink", it.blink)) }
+        p.edit().putString("mfx", a.toString()).apply()
+    }
+
     /** Gemte stave som "adresse|navn", i den rækkefølge de blev tilføjet. */
     fun loadSticks(): List<Pair<String, String>> =
         (p.getString("sticks", "") ?: "").split("\n").filter { it.contains("|") }.map {

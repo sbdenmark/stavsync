@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
@@ -141,6 +142,7 @@ fun App(onStartMusic: () -> Unit, onKeepAlive: () -> Unit) {
         RunningBar()
         SticksSection()
         MusicSection(onStartMusic)
+        MusicListSection()
         CustomSection(onKeepAlive)
         EffectSection(onKeepAlive)
         SyncSection(onKeepAlive)
@@ -279,7 +281,7 @@ val MUSIC_MODES = listOf(
     "cycle" to "Skift farve på hvert beat",
     "flash" to "Blink på beat (ellers mørk)",
     "builtin" to "Valgt indbygget effekt starter forfra på beatet",
-    "randfx" to "Tilfældig indbygget effekt på beatet",
+    "randfx" to "Skift mellem effekterne i musiklisten",
     "drop" to "Farveskift + hvid strobe ved drop",
     "pulse" to "Pulsér med lydstyrken",
     "vu" to "VU-meter (grøn → gul → rød)",
@@ -292,7 +294,7 @@ val MUSIC_HINTS = mapOf(
     "cycle" to "Ny farve på beatet. Farverne følger valget under Egne effekter.",
     "flash" to "Kort blink på beatet, mørkt imellem.",
     "builtin" to "Effekten valgt under Indbyggede effekter (fx 0x3C) startes forfra på alle stave på beatet.",
-    "randfx" to "En tilfældig effekt fra din liste, aldrig den samme to gange i træk.",
+    "randfx" to "Skifter til en tilfældig effekt fra musiklisten nedenfor (aldrig den samme to gange i træk). Effekter med flueben blinker på hvert beat.",
     "drop" to "Farveskift på beatet og 2 sekunders hvid strobe, når musikken pludselig bliver meget kraftigere.",
     "pulse" to "Lysstyrken følger bassen hele tiden. Ny farve på beatet.",
     "vu" to "Svag lyd giver svagt grønt, kraftig lyd giver klart rødt.",
@@ -327,6 +329,42 @@ fun MusicSection(onStartMusic: () -> Unit) {
             if (on) "Stop musik" else "Start musik", { if (on) Engine.stopAll() else onStartMusic() },
             "Test blink", { BleHub.all(Proto.color(Rgb.hue((0..359).random().toDouble()))) }
         )
+    }
+}
+
+// ---------- musiklisten ----------
+@Composable
+fun MusicListSection() {
+    var pick by remember { mutableStateOf(0) }
+    Section("Musikliste") {
+        Hint("Effekterne, der skiftes imellem under \"Skift mellem effekterne i musiklisten\". Sæt flueben, hvis effekten skal blinke på beatet i stedet for at lyse jævnt. Er listen tom, bruges alle dine effekter.")
+        if (Engine.musicFx.isEmpty()) Hint("Musiklisten er tom.")
+        Engine.musicFx.forEachIndexed { i, mf ->
+            Row(
+                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background, RoundedCornerShape(10.dp)).padding(start = 4.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(checked = mf.blink, onCheckedChange = { Engine.setBlink(i, it) })
+                Column(Modifier.weight(1f)) {
+                    Text(mf.fx.name, fontWeight = FontWeight.Medium)
+                    Text((if (mf.blink) "Blinker på beat" else "Lyser") + " · ${mf.fx.hex}", fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = { Engine.moveMusic(i, -1) }) { Text("▲") }
+                TextButton(onClick = { Engine.removeFromMusic(i) }) { Text("✕") }
+            }
+        }
+        if (Engine.effects.isNotEmpty()) {
+            val opts = Engine.effects.mapIndexed { i, fx -> i to "${fx.name} (${fx.hex})" }
+            Picker("Tilføj effekt fra din liste", opts, pick.coerceIn(0, Engine.effects.size - 1)) { pick = it }
+            TwoButtons(
+                "Tilføj", { Engine.effects.getOrNull(pick)?.let { Engine.addToMusic(it) } },
+                "Tilføj alle", { Engine.effects.forEach { Engine.addToMusic(it) } }
+            )
+        }
+        LabeledSlider("Lysstyrke mellem beats ved blink: ${Engine.blinkDim} %", Engine.blinkDim.toFloat(), 0f..60f) {
+            Engine.blinkDim = it.roundToInt()
+        }
     }
 }
 

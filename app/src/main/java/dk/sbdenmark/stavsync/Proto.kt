@@ -43,6 +43,9 @@ data class Fx(val id: Int, val name: String, val v: Char = 'A') {
     val hex: String get() = "0x" + id.toString(16).uppercase().padStart(2, '0')
 }
 
+/** En effekt i musiklisten. blink = lysstyrken blinker på hvert beat, ellers lyser den jævnt. */
+data class MusicFx(val fx: Fx, val blink: Boolean = false)
+
 /**
  * Kommandoer til Magic Lantern-/ELK-stave. Alle er 9 byte: 7E … EF.
  * Byte nr. 2 er kommandoens slags (1 lysstyrke, 2 hastighed, 3 effekt, 4 tænd/sluk, 5 farve).
