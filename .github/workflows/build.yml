@@ -1,0 +1,44 @@
+name: Byg APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Byg
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Navngiv APK
+        run: cp app/build/outputs/apk/release/app-release.apk Stav-synk.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Stav-synk
+          path: Stav-synk.apk
+
+      - name: Udgiv som release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Stav-synk 1.0.${{ github.run_number }}
+          body: Hent Stav-synk.apk nedenfor på telefonen og installer den.
+          files: Stav-synk.apk
+          make_latest: true
