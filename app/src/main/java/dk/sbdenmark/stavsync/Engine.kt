@@ -76,6 +76,8 @@ object Engine {
         ctx = c.applicationContext
         effects.clear(); effects.addAll(Store.loadFx())
         musicFx.clear(); musicFx.addAll(Store.loadMusicFx())
+        Names.init()
+        fvar = Store.getStr("fvar", "A").firstOrNull() ?: 'A'
         blinkDim = Store.getInt("blinkdim", 5)
         speed = Store.getInt("speed", 50); bright = Store.getInt("bright", 100)
         interval = Store.getInt("interval", 30); sens = Store.getInt("sens", 55)
@@ -95,7 +97,7 @@ object Engine {
         Store.putStr("band", band); Store.putStr("source", source); Store.putStr("ckind", cKind)
         Store.putStr("palette", palette); Store.putInt("con", cOn); Store.putInt("ctempo", cTempo.roundToInt())
         Store.putBool("nudge", nudge); Store.putBool("ack", BleHub.useAck); Store.putBool("melk", Proto.melk)
-        Store.putInt("fnum", fnum); Store.putInt("blinkdim", blinkDim)
+        Store.putInt("fnum", fnum); Store.putInt("blinkdim", blinkDim); Store.putStr("fvar", fvar.toString())
     }
 
     /** En stav, der lige er blevet forbundet (igen), får den aktuelle tilstand. */
@@ -165,7 +167,7 @@ object Engine {
     fun finderTry() { stopAll(); BleHub.all(Proto.on()); BleHub.all(Proto.effect(fnum, fvar)) }
 
     fun finderSave(name: String) {
-        val n = name.trim().ifEmpty { "Effekt " + Fx(fnum, "").hex }
+        val n = name.trim().ifEmpty { Names.nameOf(fnum, fvar).first.takeIf { it != "Ikke navngivet" } ?: ("Effekt " + Fx(fnum, "").hex) }
         val i = effects.indexOfFirst { it.id == fnum && it.v == fvar }
         if (i >= 0) effects[i] = Fx(fnum, n, fvar) else effects.add(Fx(fnum, n, fvar))
         selected = if (i >= 0) i else effects.size - 1

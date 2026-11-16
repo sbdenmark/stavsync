@@ -83,7 +83,7 @@ object Store {
 
     /** Læser listen fra browser-versionens "Kopiér listen": "Navn: 0x2A variant A" pr. linje. */
     fun parseExport(text: String): List<Fx> {
-        val re = Regex("""^(.*?):\s*0x([0-9a-fA-F]{1,2})(?:\s*variant\s*([A-Da-d]))?\s*$""")
+        val re = Regex("""^(.*?):\s*0x([0-9a-fA-F]{1,2})(?:\s*variant\s*([A-Ea-e]))?\s*$""")
         return text.lines().mapNotNull { line ->
             val m = re.find(line.trim()) ?: return@mapNotNull null
             Fx(m.groupValues[2].toInt(16), m.groupValues[1].trim(), (m.groupValues[3].ifEmpty { "A" }).uppercase()[0])

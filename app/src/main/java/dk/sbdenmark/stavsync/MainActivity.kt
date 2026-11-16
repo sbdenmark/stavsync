@@ -51,6 +51,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -442,28 +444,64 @@ fun SyncSection(onKeepAlive: () -> Unit) {
 // ---------- effekt-finder ----------
 @Composable
 fun FinderSection() {
-    var name by remember { mutableStateOf("") }
+    val (curName, src) = Names.nameOf(Engine.fnum, Engine.fvar)
+    var name by remember(Engine.fnum, Engine.fvar) { mutableStateOf(if (curName == "Ikke navngivet") "" else curName.trimEnd('?')) }
     var importText by remember { mutableStateOf("") }
     var msg by remember { mutableStateOf("") }
+    val clip = LocalClipboardManager.current
+    fun go(n: Int) { Engine.fnum = (n + 256) % 256; Engine.finderTry(); msg = "" }
     Section("Effekt-finder") {
-        Hint("Gå numrene igennem, og gem de effekter, du kan lide.")
+        Hint("Gå numrene igennem. Navnene er dine egne, set på dine stave eller gæt (med ?). Ret dem, der er forkerte.")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = { Engine.fnum = (Engine.fnum + 255) % 256; Engine.finderTry() }, modifier = Modifier.weight(1f)) { Text("◀ Forrige") }
+            OutlinedButton(onClick = { go(Engine.fnum - 1) }, modifier = Modifier.weight(1f)) { Text("◀ Forrige") }
             Text(Fx(Engine.fnum, "").hex, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
-            OutlinedButton(onClick = { Engine.fnum = (Engine.fnum + 1) % 256; Engine.finderTry() }, modifier = Modifier.weight(1f)) { Text("Næste ▶") }
+            OutlinedButton(onClick = { go(Engine.fnum + 1) }, modifier = Modifier.weight(1f)) { Text("Næste ▶") }
         }
-        Picker("Kommando-variant", listOf('A' to "A (virker på dine stave)", 'B' to "B", 'C' to "C", 'D' to "D"), Engine.fvar) {
-            Engine.fvar = it; Engine.finderTry()
+        Column {
+            Text(curName, fontSize = 17.sp, fontWeight = FontWeight.Medium)
+            if (src.isNotEmpty()) Hint(src.replaceFirstChar { it.uppercase() })
         }
-        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Navn, fx Blink rød") },
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = { Engine.finderTry() }, modifier = Modifier.weight(1f)) { Text("Vis igen") }
+            OutlinedButton(onClick = {
+                var n = Engine.fnum
+                for (k in 1..256) { n = (n + 1) % 256; if (!Names.isNamed(n, Engine.fvar)) break }
+                go(n)
+            }, modifier = Modifier.weight(1f)) { Text("Næste unavngivne ▶▶") }
+        }
+        Picker("Kommando-variant", listOf(
+            'A' to "A (virker på dine stave)", 'E' to "E (MELK-OA21-form)", 'B' to "B", 'C' to "C", 'D' to "D"
+        ), Engine.fvar) { Engine.fvar = it; Engine.finderTry() }
+        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Navn") },
             singleLine = true, modifier = Modifier.fillMaxWidth())
-        TwoButtons("Gem i listen", { Engine.finderSave(name); msg = "Gemt: ${name.ifBlank { Fx(Engine.fnum, "").hex }}"; name = "" },
-            "Slet valgt effekt", { Engine.deleteSelected(); msg = "Slettet." })
+        TwoButtons(
+            "Gem navn", { Names.rename(Engine.fnum, Engine.fvar, name); msg = if (name.isBlank()) "Navnet er fjernet." else "Navnet er gemt." },
+            "Ingen effekt her", { Names.rename(Engine.fnum, Engine.fvar, "Ingen effekt"); msg = "Markeret som tom." }
+        )
+        TwoButtons(
+            "Tilføj til min liste", { Names.rename(Engine.fnum, Engine.fvar, name); Engine.finderSave(name); msg = "Tilføjet til din liste." },
+            "Tilføj til musiklisten", {
+                Names.rename(Engine.fnum, Engine.fvar, name)
+                Engine.addToMusic(Fx(Engine.fnum, name.trim().ifEmpty { "Effekt " + Fx(Engine.fnum, "").hex }, Engine.fvar))
+                msg = "Tilføjet til musiklisten."
+            }
+        )
+        OutlinedButton(onClick = {
+            val t = Names.export(Engine.fvar)
+            clip.setText(AnnotatedString(t.ifEmpty { "(ingen navne endnu)" }))
+            msg = "Dine navne for variant ${Engine.fvar} er kopieret. Sæt dem ind i chatten."
+        }, modifier = Modifier.fillMaxWidth()) { Text("Kopiér mine navne (til Claude)") }
+        Hint(msg)
+        Text("Din liste", fontWeight = FontWeight.Medium)
+        TwoButtons("Slet valgt effekt", { Engine.deleteSelected(); msg = "Slettet." },
+            "Nulstil listen", { Engine.resetList(); msg = "Listen er nulstillet." })
         OutlinedTextField(value = importText, onValueChange = { importText = it },
             label = { Text("Indsæt listen fra browser-versionen") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-        TwoButtons("Importér", { val n = Engine.importList(importText); msg = if (n > 0) "$n effekter importeret." else "Fandt ingen effekter i teksten."; if (n > 0) importText = "" },
-            "Nulstil listen", { Engine.resetList(); msg = "Listen er nulstillet." })
-        Hint(msg)
+        OutlinedButton(onClick = {
+            val n = Engine.importList(importText)
+            msg = if (n > 0) "$n effekter importeret." else "Fandt ingen effekter i teksten."
+            if (n > 0) importText = ""
+        }, modifier = Modifier.fillMaxWidth()) { Text("Importér") }
     }
 }
 
