@@ -18,7 +18,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.random.Random
 
-enum class Run { NONE, EFFECT, SYNC, CUSTOM, MUSIC }
+enum class Run { NONE, EFFECT, SYNC, CUSTOM, MUSIC, STICKMIC }
 
 /**
  * Al styring af stavene. Kører uafhængigt af skærmen, så det fortsætter,
@@ -35,6 +35,9 @@ object Engine {
     /** Effekterne, der skiftes imellem under musik. */
     val musicFx = mutableStateListOf<MusicFx>()
     var blinkDim by mutableIntStateOf(5)
+    // stavenes egen mikrofon
+    var smMode by mutableIntStateOf(0)
+    var smSens by mutableIntStateOf(60)
     var selected by mutableIntStateOf(0)
     var speed by mutableIntStateOf(50)
     var bright by mutableIntStateOf(100)
@@ -79,6 +82,7 @@ object Engine {
         Names.init()
         fvar = Store.getStr("fvar", "A").firstOrNull() ?: 'A'
         blinkDim = Store.getInt("blinkdim", 5)
+        smMode = Store.getInt("smmode", 0); smSens = Store.getInt("smsens", 60)
         speed = Store.getInt("speed", 50); bright = Store.getInt("bright", 100)
         interval = Store.getInt("interval", 30); sens = Store.getInt("sens", 55)
         mMode = Store.getStr("mmode", "cycle"); div = Store.getInt("div", 1)
@@ -97,7 +101,7 @@ object Engine {
         Store.putStr("band", band); Store.putStr("source", source); Store.putStr("ckind", cKind)
         Store.putStr("palette", palette); Store.putInt("con", cOn); Store.putInt("ctempo", cTempo.roundToInt())
         Store.putBool("nudge", nudge); Store.putBool("ack", BleHub.useAck); Store.putBool("melk", Proto.melk)
-        Store.putInt("fnum", fnum); Store.putInt("blinkdim", blinkDim); Store.putStr("fvar", fvar.toString())
+        Store.putInt("fnum", fnum); Store.putInt("blinkdim", blinkDim); Store.putStr("fvar", fvar.toString()); Store.putInt("smmode", smMode); Store.putInt("smsens", smSens)
     }
 
     /** En stav, der lige er blevet forbundet (igen), får den aktuelle tilstand. */
@@ -117,6 +121,7 @@ object Engine {
         projection = null
         BleHub.clearColors()
         if (running == Run.MUSIC) BleHub.all(Proto.bright(bright))
+        if (running == Run.STICKMIC) BleHub.all(Proto.stickMic(false))
         running = Run.NONE
         countdown = "–"; level = 0f
         if (mStatus.startsWith("Lytter")) mStatus = ""
@@ -179,6 +184,23 @@ object Engine {
     }
 
     fun resetList() { effects.clear(); effects.addAll(Store.DEFAULT_FX); selected = 0; Store.saveFx(effects) }
+
+    // ---------- stavenes egen mikrofon ----------
+    fun startStickMic() {
+        stopAll()
+        running = Run.STICKMIC
+        BleHub.all(Proto.on())
+        BleHub.all(Proto.stickMic(true))
+        BleHub.all(Proto.stickMicSens(smSens))
+        BleHub.all(Proto.stickMicMode(smMode))
+    }
+
+    fun updateStickMic() {
+        if (running != Run.STICKMIC) return
+        BleHub.all(Proto.stickMicSens(smSens)); BleHub.all(Proto.stickMicMode(smMode))
+    }
+
+    fun addGroupToMusic(group: String) = Catalog.inGroup(group).forEach { addToMusic(Fx(it.id, it.da, 'A')) }
 
     // ---------- musiklisten ----------
     fun addToMusic(fx: Fx) {

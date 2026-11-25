@@ -145,6 +145,7 @@ fun App(onStartMusic: () -> Unit, onKeepAlive: () -> Unit) {
         SticksSection()
         MusicSection(onStartMusic)
         MusicListSection()
+        StickMicSection()
         CustomSection(onKeepAlive)
         EffectSection(onKeepAlive)
         SyncSection(onKeepAlive)
@@ -164,6 +165,7 @@ fun RunningBar() {
         Run.SYNC -> "Auto-genstart kører · ${Engine.countdown}"
         Run.CUSTOM -> "Egen effekt kører"
         Run.MUSIC -> "Musik kører · ${Engine.beats} beats"
+        Run.STICKMIC -> "Stavenes egen mikrofon kører"
         else -> ""
     }
     Row(
@@ -370,6 +372,28 @@ fun MusicListSection() {
     }
 }
 
+// ---------- stavenes egen mikrofon ----------
+val STICK_MIC_MODES = listOf(
+    0 to "Energisk", 1 to "Rytme", 2 to "Spektrum", 3 to "Rullende",
+    4 to "Energisk 2", 5 to "Rytme 2", 6 to "Spektrum 2", 7 to "Rullende 2",
+)
+
+@Composable
+fun StickMicSection() {
+    Section("Stavenes egen mikrofon (forsøg)") {
+        Hint("Magic Lantern-appens musiktilstande, hvor hver stav lytter med sin egen mikrofon. De kan vise flere farver på én stav, fx som et spektrum, men stavene styrer selv tempoet, så de er ikke helt i takt med hinanden.")
+        Picker("Tilstand", STICK_MIC_MODES, Engine.smMode) { Engine.smMode = it; Engine.updateStickMic() }
+        LabeledSlider("Følsomhed: ${Engine.smSens}", Engine.smSens.toFloat(), 0f..100f) {
+            Engine.smSens = it.roundToInt()
+        }
+        val on = Engine.running == Run.STICKMIC
+        TwoButtons(
+            if (on) "Stop" else "Start", { if (on) Engine.stopAll() else Engine.startStickMic() },
+            "Opdatér", { Engine.updateStickMic() }
+        )
+    }
+}
+
 // ---------- egne effekter ----------
 val CUSTOM_KINDS = listOf(
     "blink" to "Blink i ny farve",
@@ -451,7 +475,7 @@ fun FinderSection() {
     val clip = LocalClipboardManager.current
     fun go(n: Int) { Engine.fnum = (n + 256) % 256; Engine.finderTry(); msg = "" }
     Section("Effekt-finder") {
-        Hint("Gå numrene igennem. Navnene er dine egne, set på dine stave eller gæt (med ?). Ret dem, der er forkerte.")
+        Hint("Alle 212 effekter har navne fra Magic Lantern-appen. Ret dem, der ser anderledes ud på dine stave.")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = { go(Engine.fnum - 1) }, modifier = Modifier.weight(1f)) { Text("◀ Forrige") }
             Text(Fx(Engine.fnum, "").hex, fontSize = 26.sp, fontWeight = FontWeight.SemiBold)
@@ -469,8 +493,16 @@ fun FinderSection() {
                 go(n)
             }, modifier = Modifier.weight(1f)) { Text("Næste unavngivne ▶▶") }
         }
+        var grp by remember { mutableStateOf(Catalog.get(Engine.fnum)?.group ?: "Basic") }
+        Picker("Hop til gruppe", Catalog.GROUPS, grp) { g ->
+            grp = g; Catalog.inGroup(g).firstOrNull()?.let { go(it.id) }
+        }
+        OutlinedButton(onClick = {
+            Engine.addGroupToMusic(grp)
+            msg = "Hele gruppen \"${Catalog.GROUPS.toMap()[grp]}\" er lagt i musiklisten."
+        }, modifier = Modifier.fillMaxWidth()) { Text("Læg hele gruppen i musiklisten") }
         Picker("Kommando-variant", listOf(
-            'A' to "A (virker på dine stave)", 'E' to "E (MELK-OA21-form)", 'B' to "B", 'C' to "C", 'D' to "D"
+            'A' to "A (virker på dine stave)", 'E' to "E (Magic Lantern-appens form)", 'B' to "B", 'C' to "C", 'D' to "D"
         ), Engine.fvar) { Engine.fvar = it; Engine.finderTry() }
         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Navn") },
             singleLine = true, modifier = Modifier.fillMaxWidth())
